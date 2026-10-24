@@ -30,9 +30,10 @@ threat-model-guardrails/
 ├── references/
 │   ├── stride-question-bank.md      STRIDE-per-element matrix and questions
 │   ├── catalogues.md                OWASP / CWE / LLM / Agentic, with spec triggers
-│   ├── guardrail-patterns.md        29 guardrail patterns with their tests
+│   ├── guardrail-patterns.md        30 guardrail patterns with their tests
 │   └── test-traceability.md         verification methods, test rules, red-team corpus
-├── assets/                          output templates, register example, agent snippet
+├── assets/                          output templates, register and corpus examples, agent snippet
+├── agents/openai.yaml               Codex display metadata (optional; other harnesses ignore it)
 └── scripts/check_coverage.py        stdlib-only coverage check
 ```
 
@@ -59,8 +60,8 @@ Portability notes:
 - For a harness without skill support, paste `SKILL.md` into its system or
   project instructions and keep the other files beside the repository; the
   links are relative.
-- Codex reads an optional `agents/openai.yaml` for display metadata and
-  invocation policy. None is shipped; add one if you publish to that surface.
+- Codex reads `agents/openai.yaml` for display metadata. Other harnesses
+  ignore it.
 
 Validate the frontmatter with the reference validator:
 

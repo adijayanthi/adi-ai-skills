@@ -60,8 +60,12 @@ per model, and never merge results across models.
 ## Coverage
 
 - Every SR whose `verification` gates CI has at least one test carrying its id.
-- Every G has at least one SR, and every E guardrail has at least one
-  `enforcement-rejection` SR.
+- Every G has at least one SR. Every E guardrail has at least one SR whose
+  test would fail if the check stopped running: `enforcement-rejection`,
+  `invariant`, `policy-load` or `red-team`. Output encoding, for example, is
+  better proven by an invariant than by a rejection.
+- Every SR names `components` (code globs) or, before code exists,
+  `elements` (`A-nn`), so whoever is writing tests can find it.
 - `scripts/check_coverage.py` reports both and exits non-zero on gaps in the
   gating set. Run it in CI after the test suite.
 - An SR that genuinely cannot be tested yet is marked `"status": "known_gap"`
@@ -70,6 +74,11 @@ per model, and never merge results across models.
   believe.
 
 ## Red-team corpus (systems that read untrusted content)
+
+Keep the corpus at `docs/security/redteam-corpus.json`, in the shape of
+`assets/redteam-corpus.example.json`, outside the test directories. It cites
+SR ids, but it is data that tests read, not a test, so the coverage check
+must not count it.
 
 Plant payloads on **every ingestion surface** in the inventory, including the
 user's own message. Each corpus entry states its expected outcome *and the

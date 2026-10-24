@@ -65,7 +65,9 @@
 | T-01 | {{Webhook forged to mark invoices paid}} | S, T | A-02 | Anonymous | {{§4.2 accepts webhooks with no stated signature check}} | A07:2025, CWE-306 | High — {{revenue loss}} | High — {{public URL}} | In scope |
 
 Keep "why it is real here" specific enough that it could not be pasted into
-another project's model.
+another project's model. Status is one of: *in scope*, *out of scope*
+(reason), *accepted* (by whom), *proposed-accept* (awaiting an owner with
+authority), or *conditional on Qn*.
 
 ## 4. Explicitly not defended
 

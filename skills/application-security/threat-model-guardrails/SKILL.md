@@ -3,7 +3,8 @@ name: threat-model-guardrails
 description: Turns a product, feature or enhancement specification (any Markdown spec or PRD) into an attack-surface inventory, a STRIDE threat model, a guardrail catalogue with enforcement strengths, and testable security requirements that test-writing agents must cover. Cross-checks against OWASP Top 10, CWE Top 25 and, for AI or agent features, the OWASP LLM and Agentic Top 10s. Asks the product team batched clarifying questions where the spec is silent. Use when someone shares a spec and asks for a threat model, attack surface, abuse cases, guardrails, security requirements or security test cases, or before building a feature that adds an entry point, a privilege, a data store, an integration or an AI capability.
 license: Apache-2.0
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
+  domain: "application-security"
   spec-format: "agentskills.io"
 ---
 
@@ -79,6 +80,12 @@ The full pattern library behind these is in
   whenever `docs/security/security-requirements.json` (or the location the
   user names) already exists. Analyse only what the feature adds or changes,
   continue the existing numbering, and never renumber or reuse an ID.
+- **Delta against a model you cannot see.** If the spec cites threat or
+  guardrail IDs, or a security document that was not provided, it already has
+  a model. Ask for that document before anything else. If it cannot be
+  supplied, run in full mode with a prefix that cannot collide (for example
+  `TM-G-nn`), and map every ID the spec cites to yours in a table, so the two
+  numberings are never confused.
 
 State the mode and the output location before starting. Default location is
 `docs/security/`; follow the project's convention if it has one.
@@ -106,6 +113,16 @@ first. Then build the **attack-surface inventory**:
   execution, configuration changes.
 - **AI components**, if any — what each model reads, which of that is
   untrusted, which tools it can call, what it remembers.
+- **Learned trust** — values the system learns from the other party and
+  later relies on: endpoints from discovery or response headers, redirect
+  targets, callback parameters, keys or settings fetched from the far side.
+  For each, note where it is later trusted, such as credentials sent to it,
+  links rendered from it, or code run because of it. Specs rarely mention
+  these, and they are where implementations quietly widen the attack surface.
+
+When code exists, trace each entry point, sink and learned value to the code
+that implements it. A spec describes intent, and the gap that matters is often
+something the implementation learned that the spec never mentions.
 
 Mark every fact **stated** (cite the spec section), **inferred** (say from
 what) or **unknown**. Unknowns become questions in step 3; inferences become
@@ -120,6 +137,27 @@ Then cross-check the inventory against the catalogues in
 triggers* — a mention of file upload, templating, redirects, deserialisation,
 outbound fetches, tool-calling models and so on.
 
+For every AI component that reads untrusted content, three checks are
+mandatory, because each names a harm that authorisation checks cannot see:
+
+- **Control-flow integrity.** If it can also act, how is content read
+  mid-task prevented from adding, removing or redirecting an action? Examples
+  are a plan committed before the read, or a separate context with no tools.
+  If nothing prevents it, that is a threat.
+- **The lethal trifecta.** Does it combine private data, untrusted content and
+  a way to communicate externally? Publishing to the public web, sending
+  email, setting a link or calling a webhook all count. If all three are
+  present, in-policy exfiltration is a threat, since no policy that permits
+  the action can block it.
+- **Text-to-text harm.** Can injected content make its *output* misleading
+  ("no action needed", a fabricated recommendation) when a person acts on that
+  output? No action passes a gate, so record it, and record what bounds it.
+
+Also apply **subtraction**: for each untrusted source, ask whether the task
+needs it at all, and whether the product's scope forces broad reading before
+acting (open-ended "look at everything and fix it" requests). Narrowing scope
+is often the strongest ingress control available.
+
 Every candidate threat must be **grounded**: tied to an element and to a
 reason it is real *in this system*. A catalogue entry with no element in the
 inventory is noted as not applicable, not listed as a threat. Threats that
@@ -132,6 +170,10 @@ model. Rules:
 
 - **Batch them.** One round of up to twelve, ordered by how much the answer
   moves severity or design. Never drip one question at a time.
+- **Beyond the cap**, questions whose answer would not change a threat's
+  severity or a guardrail's strength become assumptions directly. List them
+  under the round as *assumed without asking*, with the recommended answer,
+  so the team can still overturn them.
 - **Never ask what the spec already answers.** Quote it instead.
 - Each question carries its STRIDE tag and element ID, **why it matters**, a
   **recommended answer** with the reason, and **what changes** under each
@@ -159,7 +201,10 @@ threat carries: ID, title, STRIDE category, affected elements, actor, **why it
 is real here** (one concrete sentence tied to the spec), catalogue references
 (OWASP / CWE / LLM / ASI IDs), impact and likelihood (High/Medium/Low, with
 the reason), and status — *in scope*, *out of scope* with the reason, or
-*accepted* with the owner who accepted it.
+*accepted* with the owner who accepted it. When no one with authority is
+available, use *proposed-accept*: a threat is not accepted until someone with
+the authority to accept it says so, and every proposed-accept threat is
+listed in the summary.
 
 Include the **governing principle** the system's defence rests on, in one
 sentence. Every later guardrail should be explainable from it.
@@ -202,9 +247,11 @@ threats, with:
 - **Acceptance criteria** — the negative case (the violation is rejected and
   recorded) *and* a positive control (the legitimate action still succeeds),
   so over-blocking is caught as well as under-blocking.
-- **Components** — the code paths or modules it applies to, as globs once the
-  code exists, so a test-writing agent can find which requirements bind the
-  file it is touching.
+- **Components** — the code paths or modules it applies to, as globs, so a
+  test-writing agent can find which requirements bind the file it is
+  touching. Before code exists, put the element IDs (`A-nn`) in `elements`,
+  leave `components` empty, and fill in the globs when the code lands. A
+  requirement with neither cannot be found by anyone writing tests.
 
 Write the machine-readable register alongside the document, in the shape of
 [assets/security-requirements.example.json](assets/security-requirements.example.json).
@@ -223,8 +270,12 @@ harness:
    whichever the project's harnesses read. Ask before editing it.
 3. If the system reads untrusted content into a model, scaffold the red-team
    corpus described in
-   [references/test-traceability.md](references/test-traceability.md), with
-   every entry stating its expected outcome and the mechanism that produces it.
+   [references/test-traceability.md](references/test-traceability.md) at
+   `docs/security/redteam-corpus.json`, in the shape of
+   [assets/redteam-corpus.example.json](assets/redteam-corpus.example.json).
+   Every entry states its expected outcome and the mechanism that produces
+   it. Keep the corpus out of test directories: it cites SR ids but is not a
+   test, and the coverage check would count it as one.
 4. Run the coverage check and report uncovered requirements. They are
    expected on a fresh model; report them as the test backlog, not as a
    failure.
@@ -235,6 +286,10 @@ harness:
 - Every in-scope T is covered by S/E, or is accepted with an owner.
 - No guarantee rests on an A control, a classifier, or a model's compliance.
 - Every "reversible" claim names its restore mechanism.
+- Every AI component that reads untrusted content has a control-flow
+  integrity answer, a lethal-trifecta assessment and a text-to-text harm
+  entry.
+- Every learned value that is later trusted has a guardrail binding it.
 - Every component with a failure mode states open or closed.
 - Every SR has a negative case and a positive control.
 - Out-of-scope and assumptions lists are present and non-empty, or explicitly

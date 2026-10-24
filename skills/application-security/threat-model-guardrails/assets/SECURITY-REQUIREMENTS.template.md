@@ -18,7 +18,9 @@ and `scripts/security_coverage.py` can report what is uncovered.
 | Guardrails | G-01 |
 | Threats | T-01 |
 | Verification | `enforcement-rejection` |
-| Components | `{{src/webhooks/**}}` |
+| Elements | A-02 |
+| Components | `{{src/webhooks/**}}` — empty until the code exists |
+| Conditional on | {{Qn, if the requirement depends on an open question}} |
 | Status | open / covered / known_gap ({{issue}}) |
 
 **Acceptance criteria**

@@ -64,6 +64,11 @@ Q4  [Elevation · A-07 Admin API]
 - Are configuration, limits and allowlists code, data or environment? Who can
   edit them, and what happens if they fail to load?
 - Can a confirmation or approval be replayed against a changed request?
+- Does the system learn any address, endpoint, key or setting from the other
+  party, through discovery, response headers, redirects, metadata or callback
+  parameters? Is that value later trusted, for example with credentials sent
+  to it? Is it checked against what the user actually named, for origin and
+  scheme?
 - **AI:** can content the model reads change what it does next — which tool,
   which target, which value? Can it persist into memory or later turns?
 
@@ -92,7 +97,10 @@ Q4  [Elevation · A-07 Admin API]
   which check fired?
 - **AI:** can the model be induced to reveal its instructions, other users'
   data or secrets? Can it publish data outward — a link, an image URL, a
-  public page, a webhook?
+  public page, a webhook? If it holds private data, reads untrusted content
+  *and* has any such outward path, that is the lethal trifecta. Exfiltration
+  is then possible through permitted actions, and no authorisation check sees
+  it.
 
 ## D — Denial of service: can availability be exhausted or broken?
 
@@ -127,6 +135,10 @@ These rarely sit under one letter and are often the most valuable.
 
 - **Non-goals.** What will the system deliberately never do? Is each non-goal
   enforced by the capability being absent, or only by policy?
+- **Subtraction and scope.** Does any request shape force the system to read
+  broadly before acting, such as "review everything and fix what's wrong"?
+  Could the product be request-driven instead, so each task reads only what
+  it names? Which untrusted sources does no task actually need?
 - **Irreversibility.** For each sink: can we undo it on the user's behalf, by
   what named mechanism, and for how long? What does the underlying platform
   actually restore — verified, not assumed?

@@ -1,0 +1,3 @@
+interface:
+  display_name: "Threat model and guardrails"
+  short_description: "Spec to STRIDE threat model, guardrails and testable security requirements"
