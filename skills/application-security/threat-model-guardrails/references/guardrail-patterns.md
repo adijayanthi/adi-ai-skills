@@ -255,6 +255,18 @@ into another's response.
 tenants is a guardrail violation, not an optimisation.
 **Test:** two tenants' assembled inputs share no tenant-specific bytes.
 
+### P30 — Bind learned endpoints to what the user named · E
+**Problem:** the system learns an address from the other party (a discovered
+API root, a header, a redirect, a callback parameter) and later sends
+credentials or trust there. A misconfigured or compromised party then
+redirects authenticated traffic, often downgrading it to plain http.
+**Mechanism:** a learned endpoint must share the origin and scheme of the
+address the user supplied. Check it when it is learned and again at use,
+because rows stored before the check exist. Refuse rather than rewrite: a
+rewritten guess can succeed against the wrong thing.
+**Test:** a learned endpoint on another origin, or on http, is refused and
+nothing is stored or sent.
+
 ---
 
 ## Policy and operations

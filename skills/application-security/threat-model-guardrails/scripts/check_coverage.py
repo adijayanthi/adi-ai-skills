@@ -5,8 +5,10 @@ Reads a threat-model-guardrails register (security-requirements.json) and the
 project's test files, and reports:
 
   - requirements whose verification gates CI but no test carries their id
-  - guardrails with no requirement, and E guardrails with no
-    enforcement-rejection requirement
+  - guardrails with no requirement, and E guardrails with no requirement
+    whose test would fail if the check stopped running (enforcement-rejection,
+    invariant, policy-load or red-team)
+  - requirements with neither components nor elements (warning only)
   - ids used in tests that the register does not define (stale tags)
   - references in the register to threats or guardrails that do not exist
 
@@ -33,6 +35,8 @@ import sys
 
 GATING = {"surface-absence", "enforcement-rejection", "invariant", "policy-load", "red-team"}
 NON_GATING = {"eval", "review", "monitor"}
+# What proves an E guardrail is still running. surface-absence proves an S one.
+PROVES_ENFORCEMENT = {"enforcement-rejection", "invariant", "policy-load", "red-team"}
 DEFAULT_EXTS = ".ts,.tsx,.js,.jsx,.mjs,.cjs,.py,.go,.rs,.java,.kt,.cs,.rb,.php,.swift,.scala,.ex,.exs"
 SR_ID = re.compile(r"\bSR-\d{3,}\b")
 SKIP_DIRS = {"node_modules", ".git", "dist", "build", "vendor", ".venv", "__pycache__"}
@@ -85,7 +89,8 @@ def check(register: dict, found: dict[str, set[str]]) -> dict:
         "non_gating": [],
         "stale_tags": {},
         "guardrails_without_requirements": [],
-        "enforced_without_rejection_test": [],
+        "enforced_without_gating_test": [],
+        "unlocatable": [],
         "register_errors": [],
     }
 
@@ -102,6 +107,9 @@ def check(register: dict, found: dict[str, set[str]]) -> dict:
         for t in r.get("threats", []):
             if threats and t not in t_ids:
                 result["register_errors"].append(f"{rid}: references undefined threat {t}")
+
+        if not r.get("components") and not r.get("elements"):
+            result["unlocatable"].append(rid)
 
         if r.get("status") == "known_gap":
             result["known_gaps"].append({"id": rid, "issue": r.get("issue")})
@@ -120,9 +128,9 @@ def check(register: dict, found: dict[str, set[str]]) -> dict:
         if not mine:
             result["guardrails_without_requirements"].append(g["id"])
         elif "E" in g.get("strength", []) and not any(
-            r.get("verification") == "enforcement-rejection" for r in mine
+            r.get("verification") in PROVES_ENFORCEMENT for r in mine
         ):
-            result["enforced_without_rejection_test"].append(g["id"])
+            result["enforced_without_gating_test"].append(g["id"])
 
     return result
 
@@ -134,7 +142,7 @@ def failed(result: dict) -> bool:
             "uncovered",
             "stale_tags",
             "guardrails_without_requirements",
-            "enforced_without_rejection_test",
+            "enforced_without_gating_test",
             "register_errors",
         )
     )
@@ -153,8 +161,10 @@ def print_report(result: dict) -> None:
     section("Stale tags (used in tests, not in the register):",
             [f"{k}  {', '.join(v)}" for k, v in result["stale_tags"].items()])
     section("Guardrails with no requirement:", result["guardrails_without_requirements"])
-    section("Enforced guardrails with no enforcement-rejection requirement:",
-            result["enforced_without_rejection_test"])
+    section("Enforced guardrails with no requirement that proves the check runs:",
+            result["enforced_without_gating_test"])
+    section("Requirements with neither components nor elements (warning):",
+            result["unlocatable"])
     section("Register errors:", result["register_errors"])
     section("Known gaps (reported, not failed):",
             [f"{g['id']}  {g['issue'] or 'no issue recorded'}" for g in result["known_gaps"]])

@@ -1,0 +1,24 @@
+{
+  "name": "adi-ai-skills",
+  "owner": {
+    "name": "Adi Jayanthi",
+    "url": "https://github.com/adijayanthi"
+  },
+  "metadata": {
+    "description": "Application security and cybersecurity agent skills, one installable plugin per security domain.",
+    "version": "1.1.0"
+  },
+  "plugins": [
+    {
+      "name": "application-security",
+      "description": "Threat modelling, guardrails and testable security requirements from a product or feature specification.",
+      "source": "./",
+      "strict": false,
+      "category": "security",
+      "keywords": ["application-security", "threat-modeling", "stride", "owasp", "security-requirements"],
+      "skills": [
+        "./skills/application-security/threat-model-guardrails"
+      ]
+    }
+  ]
+}

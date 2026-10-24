@@ -1,0 +1,113 @@
+{
+  "schema": "threat-model-guardrails/register@1",
+  "system": "Example invoicing service",
+  "modelVersion": 1,
+  "specification": "docs/SPEC.md@3f2a9c1",
+  "threats": [
+    {
+      "id": "T-01",
+      "title": "Forged payment webhook marks invoices paid",
+      "stride": [
+        "S",
+        "T"
+      ],
+      "elements": [
+        "A-02"
+      ],
+      "catalogue": [
+        "A07:2025",
+        "CWE-306"
+      ],
+      "impact": "high",
+      "likelihood": "high",
+      "status": "in_scope",
+      "acceptedBy": null
+    },
+    {
+      "id": "T-02",
+      "title": "Tenant reads another tenant's invoice PDF by changing the id",
+      "stride": [
+        "E",
+        "I"
+      ],
+      "elements": [
+        "A-04"
+      ],
+      "catalogue": [
+        "API1:2023",
+        "CWE-639"
+      ],
+      "impact": "high",
+      "likelihood": "medium",
+      "status": "proposed-accept",
+      "acceptedBy": null,
+      "conditionalOn": [
+        "Q3"
+      ]
+    }
+  ],
+  "guardrails": [
+    {
+      "id": "G-01",
+      "title": "Webhook signatures verified before any state change",
+      "strength": [
+        "E"
+      ],
+      "mitigates": [
+        "T-01"
+      ],
+      "enforcementPoint": "ingress",
+      "deterministic": true,
+      "fails": "closed"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "SR-001",
+      "title": "Unsigned payment webhooks change nothing",
+      "statement": "The system shall reject a payment webhook whose signature does not verify against the tenant's signing secret, and leave the invoice unchanged.",
+      "guardrails": [
+        "G-01"
+      ],
+      "threats": [
+        "T-01"
+      ],
+      "verification": "enforcement-rejection",
+      "elements": [
+        "A-02"
+      ],
+      "components": [
+        "src/webhooks/**"
+      ],
+      "conditionalOn": [],
+      "acceptance": {
+        "negative": "Missing or wrong signature returns 401, writes a Suspicious audit row with rule G-01, invoice unchanged.",
+        "positiveControl": "A correctly signed webhook marks the invoice paid."
+      },
+      "status": "open"
+    },
+    {
+      "id": "SR-002",
+      "title": "Output encoding of tenant text in invoice HTML",
+      "statement": "The system shall render every tenant-supplied string in invoice HTML as text, never as markup.",
+      "guardrails": [
+        "G-01"
+      ],
+      "threats": [
+        "T-01"
+      ],
+      "verification": "invariant",
+      "elements": [
+        "A-03"
+      ],
+      "components": [],
+      "conditionalOn": [],
+      "acceptance": {
+        "negative": "A rendered invoice built from a corpus of markup payloads contains none of them as live elements.",
+        "positiveControl": "Ordinary text, including &, < and quotes, renders as written."
+      },
+      "status": "known_gap",
+      "issue": "Renderer not built yet"
+    }
+  ]
+}
