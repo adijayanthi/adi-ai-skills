@@ -1,0 +1,194 @@
+name: CI
+
+# The language-agnostic jobs of adijayanthi/ci-checks' reusable-security.yml
+# (at 629a1544), copied rather than called: that repository is private, and a
+# public repository cannot call a private repository's reusable workflow. Keep
+# the pinned versions and SHAs in step with it when ci-checks changes.
+# Omitted: dependency-audit (npm only; this repository has no lockfile).
+# Changed: Semgrep uses p/python, since the scripts here are Python.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  ZIZMOR_VERSION: '1.29.0'
+  SEMGREP_VERSION: '1.172.0'
+  GITLEAKS_VERSION: '8.30.1'
+  GITLEAKS_SHA256: '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  validate:
+    name: Validate skills
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check skill layout and frontmatter
+        run: python3 -I scripts/validate.py
+      - name: Exercise each skill's coverage script against its example register
+        run: |
+          set -euo pipefail
+          for s in skills/*/*/scripts/check_coverage.py; do
+            d="$(dirname "$(dirname "$s")")"
+            python3 -I "$s" "$d/assets/security-requirements.example.json" "$(mktemp -d)" --report-only
+          done
+
+  # Deterministic, dependency-free guard against the dominant GitHub Actions
+  # supply-chain attack path: a mutable @v4 tag executes whatever that tag points
+  # at today, with this job's full token and secrets.
+  action-pinning:
+    name: Action pinning
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Inlined rather than calling scripts/check-action-pinning.sh: a reusable
+      # workflow checks out the *calling* repository, so any script it invokes
+      # must exist there. Self-contained is the only thing that works cross-repo.
+      # scripts/check-action-pinning.sh mirrors this for local runs.
+      - name: Every third-party action must be pinned to a full commit SHA
+        run: |
+          set -euo pipefail
+          violations=0
+          if [[ -d .github/workflows ]]; then
+            while IFS= read -r -d '' wf; do
+              while IFS=: read -r line_no content; do
+                ref="$(sed -E 's/^[[:space:]]*-?[[:space:]]*uses:[[:space:]]*//; s/[[:space:]]*#.*$//; s/^["'"'"']//; s/["'"'"']$//' <<<"${content}")"
+                [[ "${ref}" == ./* ]] && continue
+                [[ "${ref}" == docker://* ]] && continue
+                if [[ ! "${ref}" =~ @[0-9a-f]{40}$ ]]; then
+                  echo "::error file=${wf},line=${line_no}::Action '${ref}' is not pinned to a full commit SHA."
+                  violations=$((violations + 1))
+                fi
+              done < <(grep -nE '^[[:space:]]*-?[[:space:]]*uses:' "${wf}" || true)
+            done < <(find .github/workflows -type f \( -name '*.yml' -o -name '*.yaml' \) -print0)
+          fi
+          if [[ "${violations}" -gt 0 ]]; then
+            echo "Pin each to a full SHA:  uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1"
+            exit 1
+          fi
+          echo "All action references are pinned to full commit SHAs."
+
+  workflow-audit:
+    name: Workflow audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Installed from PyPI at a pinned version rather than via a third-party
+      # action, so the audit tool is not itself an unpinned dependency.
+      # The version comes from the workflow-level env, never straight into the
+      # run block: an expression inside `run:` is substituted before the shell
+      # sees it.
+      - name: Audit workflows with zizmor
+        run: pipx run "zizmor==${ZIZMOR_VERSION}" --min-severity=high --no-online-audits .github/workflows/
+
+  sast:
+    name: Static analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Scan with Semgrep
+        run: |
+          set -euo pipefail
+          pipx install "semgrep==${SEMGREP_VERSION}"
+          semgrep scan \
+            --config p/security-audit \
+            --config p/python \
+            --error \
+            --skip-unknown-extensions \
+            --metrics=off
+
+  # Alongside GitHub's own secret scanning and push protection, which this public
+  # repository has: gitleaks also judges the PR's tree before it is merged. The
+  # binary is MIT-licensed and pinned by version and SHA-256; the gitleaks
+  # *action* is avoided because it requires a licence key for organisation use.
+  secrets:
+    name: Secret detection
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "${tarball}" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${tarball}"
+          echo "${GITLEAKS_SHA256}  ${tarball}" | sha256sum --check --strict
+          tar -xzf "${tarball}" gitleaks
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+      - name: Scan the working tree for secrets
+        run: gitleaks dir . --redact --no-banner --verbose
+
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The dependency review API needs the dependency graph, which is available on
+    # public repositories and on private repositories with GitHub Advanced
+    # Security. Skipping (rather than failing) on a private repo keeps the gate
+    # honest today and switches this check on automatically the moment the
+    # repository becomes public or GHAS is enabled.
+    if: github.event_name == 'pull_request' && github.event.repository.private == false
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Judges only what the PR adds. A whole-tree scanner such as `npm audit`
+      # fails PRs for pre-existing debt, which is the fastest route to a check
+      # everyone learns to bypass.
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: moderate
+          comment-summary-in-pr: never
+
+  # The one check the main-branch ruleset requires, so adding or renaming a job
+  # never silently drops it from the gate.
+  ci-gate:
+    name: ci-gate
+    if: always()
+    needs: [validate, action-pinning, workflow-audit, sast, secrets, dependency-review]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify no upstream job failed or was cancelled
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          echo "${NEEDS}" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          if ! echo "${NEEDS}" | jq -e 'all(.[]; .result == "success" or .result == "skipped")' > /dev/null; then
+            echo "::error::CI gate failed."
+            exit 1
+          fi
+          echo "CI gate passed."
