@@ -60,5 +60,6 @@ Each skill's own README covers how to use it.
 
 ## Licence
 
-[Apache License 2.0](LICENSE). Each skill folder carries its own copy, so a
-skill copied on its own keeps its licence.
+[Apache License 2.0](LICENSE). Copyright 2026 Aditya Jayanthi, as recorded in
+[NOTICE](NOTICE). Each skill folder carries its own copy of both files, so a
+skill copied on its own keeps its licence and copyright notice.
